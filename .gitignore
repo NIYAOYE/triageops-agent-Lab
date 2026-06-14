@@ -24,6 +24,7 @@ workspace/*
 !workspace/.gitkeep
 .tmp/
 .pytest_tmp/
+.worktrees/
 
 # Build and packaging output
 build/
