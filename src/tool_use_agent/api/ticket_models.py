@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from tool_use_agent.investigations.models import (
@@ -82,4 +84,21 @@ class ApiErrorResponse(BaseModel):
     code: str
     message: str
     request_id: str
-    details: dict[str, str]
+    details: dict[str, Any]
+
+
+class TicketImportResponse(BaseModel):
+    imported_count: int
+    tickets: list[TicketResponse]
+
+
+class AttachmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ticket_id: str
+    original_filename: str
+    stored_path: str
+    media_type: str
+    size_bytes: int
+    created_at: datetime

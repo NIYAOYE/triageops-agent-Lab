@@ -19,6 +19,7 @@ from tool_use_agent.tickets.models import (
     TicketPriority,
     TicketSource,
     TicketStatus,
+    TicketDraft,
 )
 from tool_use_agent.tickets.state_machine import transition_ticket_status
 
@@ -110,6 +111,64 @@ class SQLiteTicketRepository:
         except sqlite3.IntegrityError as exc:
             raise TicketAlreadyExists(ticket_id) from exc
         return self.get_ticket(ticket_id)
+
+    def create_tickets(
+        self,
+        drafts: list[TicketDraft],
+        *,
+        source: TicketSource,
+    ) -> list[Ticket]:
+        now = self._utc_now()
+        try:
+            with self._lock, self._connection:
+                self._connection.executemany(
+                    """
+                    INSERT INTO tickets (
+                        id,
+                        title,
+                        description,
+                        environment,
+                        service,
+                        priority,
+                        category,
+                        status,
+                        source,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            draft.id,
+                            draft.title,
+                            draft.description,
+                            draft.environment,
+                            draft.service,
+                            draft.priority.value,
+                            draft.category,
+                            TicketStatus.NEW.value,
+                            source.value,
+                            now,
+                            now,
+                        )
+                        for draft in drafts
+                    ],
+                )
+        except sqlite3.IntegrityError as exc:
+            raise TicketAlreadyExists("import_batch") from exc
+        return [self.get_ticket(draft.id) for draft in drafts]
+
+    def find_existing_ticket_ids(self, ticket_ids: list[str]) -> set[str]:
+        if not ticket_ids:
+            return set()
+        placeholders = ",".join("?" for _ in ticket_ids)
+        with self._lock:
+            rows = self._connection.execute(
+                f"SELECT id FROM tickets WHERE id IN ({placeholders})",
+                ticket_ids,
+            ).fetchall()
+        return {row["id"] for row in rows}
 
     def get_ticket(self, ticket_id: str) -> Ticket:
         with self._lock:
@@ -262,6 +321,19 @@ class SQLiteTicketRepository:
                 (ticket_id,),
             ).fetchall()
         return [self._attachment_from_row(row) for row in rows]
+
+    def get_attachment_total_bytes(self, ticket_id: str) -> int:
+        with self._lock:
+            self._require_ticket(ticket_id)
+            row = self._connection.execute(
+                """
+                SELECT COALESCE(SUM(size_bytes), 0) AS total_bytes
+                FROM attachments
+                WHERE ticket_id = ?
+                """,
+                (ticket_id,),
+            ).fetchone()
+        return int(row["total_bytes"])
 
     def create_investigation(
         self,

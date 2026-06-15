@@ -49,3 +49,14 @@ class Attachment:
     media_type: str
     size_bytes: int
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class TicketDraft:
+    id: str
+    title: str
+    description: str
+    environment: str
+    service: str
+    priority: TicketPriority
+    category: str | None = None

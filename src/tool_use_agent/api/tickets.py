@@ -1,19 +1,27 @@
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, File, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from tool_use_agent.api.ticket_models import (
     ApiErrorResponse,
+    AttachmentResponse,
     TicketCreateRequest,
     TicketDetailResponse,
     TicketPageResponse,
     TicketResponse,
+    TicketImportResponse,
 )
 from tool_use_agent.tickets.models import TicketPriority, TicketStatus
 from tool_use_agent.tickets.repository import TicketAlreadyExists
-from tool_use_agent.tickets.service import TicketService
+from tool_use_agent.tickets.service import (
+    AttachmentTooLarge,
+    AttachmentValidationError,
+    TicketImportTooLarge,
+    TicketImportValidationError,
+    TicketService,
+)
 
 
 def create_ticket_router(service: TicketService) -> APIRouter:
@@ -69,6 +77,39 @@ def create_ticket_router(service: TicketService) -> APIRouter:
             page_size=result.page_size,
         )
 
+    @router.post(
+        "/import",
+        response_model=TicketImportResponse,
+        status_code=status.HTTP_201_CREATED,
+        responses={
+            status.HTTP_400_BAD_REQUEST: {"model": ApiErrorResponse},
+            status.HTTP_413_CONTENT_TOO_LARGE: {"model": ApiErrorResponse},
+        },
+    )
+    async def import_tickets(file: UploadFile = File(...)):
+        content = await file.read(service.max_import_bytes + 1)
+        filename = file.filename or ""
+        try:
+            tickets = service.import_tickets(filename, content)
+        except TicketImportValidationError as exc:
+            return _error_response(
+                status.HTTP_400_BAD_REQUEST,
+                code=exc.code,
+                message=str(exc),
+                details={"errors": exc.errors},
+            )
+        except TicketImportTooLarge as exc:
+            return _error_response(
+                status.HTTP_413_CONTENT_TOO_LARGE,
+                code=exc.code,
+                message=str(exc),
+                details={"max_bytes": service.max_import_bytes},
+            )
+        return TicketImportResponse(
+            imported_count=len(tickets),
+            tickets=[TicketResponse.model_validate(item) for item in tickets],
+        )
+
     @router.get(
         "/{ticket_id}",
         response_model=TicketDetailResponse,
@@ -86,6 +127,48 @@ def create_ticket_router(service: TicketService) -> APIRouter:
             )
         return TicketDetailResponse.model_validate(detail)
 
+    @router.post(
+        "/{ticket_id}/attachments",
+        response_model=AttachmentResponse,
+        status_code=status.HTTP_201_CREATED,
+        responses={
+            status.HTTP_400_BAD_REQUEST: {"model": ApiErrorResponse},
+            status.HTTP_404_NOT_FOUND: {"model": ApiErrorResponse},
+            status.HTTP_413_CONTENT_TOO_LARGE: {"model": ApiErrorResponse},
+        },
+    )
+    async def upload_attachment(ticket_id: str, file: UploadFile = File(...)):
+        content = await file.read(service.max_attachment_bytes + 1)
+        try:
+            attachment = service.save_attachment(
+                ticket_id,
+                filename=file.filename or "",
+                media_type=file.content_type or "application/octet-stream",
+                content=content,
+            )
+        except KeyError:
+            return _error_response(
+                status.HTTP_404_NOT_FOUND,
+                code="ticket_not_found",
+                message=f"Ticket {ticket_id} was not found.",
+                details={"ticket_id": ticket_id},
+            )
+        except AttachmentValidationError as exc:
+            return _error_response(
+                status.HTTP_400_BAD_REQUEST,
+                code=exc.code,
+                message=str(exc),
+                details={},
+            )
+        except AttachmentTooLarge as exc:
+            return _error_response(
+                status.HTTP_413_CONTENT_TOO_LARGE,
+                code=exc.code,
+                message=str(exc),
+                details={"max_bytes": service.max_attachment_bytes},
+            )
+        return AttachmentResponse.model_validate(attachment)
+
     return router
 
 
@@ -94,7 +177,7 @@ def _error_response(
     *,
     code: str,
     message: str,
-    details: dict[str, str],
+    details: dict[str, Any],
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
