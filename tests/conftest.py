@@ -37,7 +37,13 @@ def app(tmp_path):
         context_char_threshold=40_000,
         recent_message_count=12,
     )
-    ticket_service = TicketService(ticket_repository)
+    ticket_service = TicketService(
+        ticket_repository,
+        workspace_root=tmp_path / "workspace",
+        max_import_bytes=1000,
+        max_attachment_bytes=100,
+        max_ticket_attachment_bytes=200,
+    )
     application = create_app(service, ticket_service)
     yield application
     ticket_repository.close()

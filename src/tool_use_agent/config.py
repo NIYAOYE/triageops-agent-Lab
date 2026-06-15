@@ -16,6 +16,7 @@ class Settings:
     python_timeout_seconds: float
     max_tool_steps: int
     max_file_bytes: int
+    max_ticket_attachment_bytes: int
     max_output_chars: int
     context_char_threshold: int
     recent_message_count: int
@@ -48,6 +49,9 @@ class Settings:
             max_tool_steps=int(os.getenv("AGENT_MAX_TOOL_STEPS", "8")),
             max_file_bytes=int(
                 os.getenv("AGENT_MAX_FILE_BYTES", "1000000")
+            ),
+            max_ticket_attachment_bytes=int(
+                os.getenv("AGENT_MAX_TICKET_ATTACHMENT_BYTES", "5000000")
             ),
             max_output_chars=int(
                 os.getenv("AGENT_MAX_OUTPUT_CHARS", "12000")

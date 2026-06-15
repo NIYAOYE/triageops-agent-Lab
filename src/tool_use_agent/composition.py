@@ -64,7 +64,13 @@ def build_service(settings: Settings | None = None) -> ChatService:
 
 def build_ticket_service(settings: Settings | None = None) -> TicketService:
     resolved = settings or Settings.from_env()
-    return TicketService(SQLiteTicketRepository(resolved.database_path))
+    return TicketService(
+        SQLiteTicketRepository(resolved.database_path),
+        workspace_root=resolved.workspace_root,
+        max_import_bytes=resolved.max_file_bytes,
+        max_attachment_bytes=resolved.max_file_bytes,
+        max_ticket_attachment_bytes=resolved.max_ticket_attachment_bytes,
+    )
 
 
 def create_application() -> FastAPI:

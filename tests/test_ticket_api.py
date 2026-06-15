@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import json
 
 
 def ticket_payload(ticket_id="INC-1042", priority="P1"):
@@ -74,3 +75,100 @@ def test_ticket_request_validation_uses_422(app):
     response = TestClient(app).post("/v1/tickets", json=payload)
 
     assert response.status_code == 422
+
+
+def test_import_json_and_csv_files(app):
+    client = TestClient(app)
+    json_response = client.post(
+        "/v1/tickets/import",
+        files={
+            "file": (
+                "tickets.json",
+                json.dumps(
+                    [
+                        {
+                            "id": "INC-2001",
+                            "title": "JSON ticket",
+                            "description": "Imported from JSON.",
+                            "environment": "production",
+                            "service": "orders-api",
+                            "priority": "P1",
+                        }
+                    ]
+                ),
+                "application/json",
+            )
+        },
+    )
+    csv_response = client.post(
+        "/v1/tickets/import",
+        files={
+            "file": (
+                "tickets.csv",
+                "id,title,description,environment,service,priority\n"
+                "INC-2002,CSV ticket,Imported from CSV,staging,billing-api,P2\n",
+                "text/csv",
+            )
+        },
+    )
+
+    assert json_response.status_code == 201
+    assert json_response.json()["imported_count"] == 1
+    assert json_response.json()["tickets"][0]["source"] == "json_import"
+    assert csv_response.status_code == 201
+    assert csv_response.json()["tickets"][0]["source"] == "csv_import"
+
+
+def test_invalid_import_returns_row_errors_and_writes_nothing(app):
+    response = TestClient(app).post(
+        "/v1/tickets/import",
+        files={
+            "file": (
+                "tickets.csv",
+                "id,title,description,environment,service,priority\n"
+                "INC-2001,,Missing title,production,orders-api,P1\n",
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "ticket_import_validation_failed"
+    assert response.json()["details"]["errors"][0]["row"] == 2
+    assert TestClient(app).get("/v1/tickets").json()["total"] == 0
+
+
+def test_upload_attachment_and_reject_invalid_or_oversized_file(app):
+    client = TestClient(app)
+    client.post("/v1/tickets", json=ticket_payload())
+
+    uploaded = client.post(
+        "/v1/tickets/INC-1042/attachments",
+        files={"file": ("orders.log", b"timeout", "text/plain")},
+    )
+    invalid = client.post(
+        "/v1/tickets/INC-1042/attachments",
+        files={"file": ("run.exe", b"MZ", "application/octet-stream")},
+    )
+    oversized = client.post(
+        "/v1/tickets/INC-1042/attachments",
+        files={"file": ("large.log", b"x" * 101, "text/plain")},
+    )
+
+    assert uploaded.status_code == 201
+    assert uploaded.json()["original_filename"] == "orders.log"
+    assert uploaded.json()["size_bytes"] == 7
+    assert invalid.status_code == 400
+    assert invalid.json()["code"] == "invalid_attachment"
+    assert oversized.status_code == 413
+    assert oversized.json()["code"] == "attachment_too_large"
+
+
+def test_attachment_upload_for_missing_ticket_returns_404(app):
+    response = TestClient(app).post(
+        "/v1/tickets/INC-missing/attachments",
+        files={"file": ("orders.log", b"timeout", "text/plain")},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "ticket_not_found"
