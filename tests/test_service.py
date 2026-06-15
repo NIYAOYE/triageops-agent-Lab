@@ -48,7 +48,7 @@ def test_chat_persists_user_assistant_tool_message_and_audit(tmp_path):
             "assistant",
         ]
         assert result.answer == "final answer"
-        audits = repository.list_tool_audits(session.id)
+        audits = chat_service.list_tool_audits(session.id)
         assert audits[0].call_id == "call-1"
         assert audits[0].arguments == {"query": "q"}
     finally:
@@ -144,6 +144,7 @@ def test_stream_event_order_is_stable(tmp_path):
             "message_start",
             "tool_start",
             "tool_result",
+            "model_delta",
             "message_end",
         ]
     finally:

@@ -122,6 +122,12 @@ class ChatService:
 
         answer = self._final_answer(graph_state)
         self._repository.add_message(session_id, "assistant", answer)
+        yield {
+            "event": "model_delta",
+            "session_id": session_id,
+            "request_id": request_id,
+            "text": answer,
+        }
         self._compact_history(session_id)
         yield {
             "event": "message_end",
@@ -140,6 +146,9 @@ class ChatService:
 
     def list_messages(self, session_id: str):
         return self._repository.list_messages(session_id)
+
+    def list_tool_audits(self, session_id: str):
+        return self._repository.list_tool_audits(session_id)
 
     def close(self) -> None:
         self._repository.close()
