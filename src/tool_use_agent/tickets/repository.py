@@ -136,6 +136,68 @@ class SQLiteTicketRepository:
             raise KeyError("ticket_not_found")
         return self._ticket_from_row(row)
 
+    def list_tickets(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        status: TicketStatus | None = None,
+        priority: TicketPriority | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> tuple[list[Ticket], int]:
+        sort_columns = {
+            "created_at": "created_at",
+            "updated_at": "updated_at",
+            "priority": "priority",
+        }
+        if sort_by not in sort_columns:
+            raise ValueError("invalid_ticket_sort_field")
+        normalized_order = sort_order.lower()
+        if normalized_order not in {"asc", "desc"}:
+            raise ValueError("invalid_ticket_sort_order")
+
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if status is not None:
+            conditions.append("status = ?")
+            parameters.append(status.value)
+        if priority is not None:
+            conditions.append("priority = ?")
+            parameters.append(priority.value)
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        column = sort_columns[sort_by]
+
+        with self._lock:
+            total = int(
+                self._connection.execute(
+                    f"SELECT COUNT(*) FROM tickets {where_clause}",
+                    parameters,
+                ).fetchone()[0]
+            )
+            rows = self._connection.execute(
+                f"""
+                SELECT
+                    id,
+                    title,
+                    description,
+                    environment,
+                    service,
+                    priority,
+                    category,
+                    status,
+                    source,
+                    created_at,
+                    updated_at
+                FROM tickets
+                {where_clause}
+                ORDER BY {column} {normalized_order.upper()}, id ASC
+                LIMIT ? OFFSET ?
+                """,
+                (*parameters, limit, offset),
+            ).fetchall()
+        return [self._ticket_from_row(row) for row in rows], total
+
     def add_attachment(
         self,
         ticket_id: str,
@@ -265,6 +327,33 @@ class SQLiteTicketRepository:
         if row is None:
             raise KeyError("investigation_not_found")
         return self._investigation_from_row(row)
+
+    def get_current_investigation(
+        self,
+        ticket_id: str,
+    ) -> Investigation | None:
+        with self._lock:
+            self._require_ticket(ticket_id)
+            row = self._connection.execute(
+                """
+                SELECT
+                    id,
+                    ticket_id,
+                    session_id,
+                    status,
+                    started_at,
+                    diagnosed_at,
+                    completed_at,
+                    stop_reason,
+                    supplemental_instructions
+                FROM investigations
+                WHERE ticket_id = ? AND completed_at IS NULL
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (ticket_id,),
+            ).fetchone()
+        return self._investigation_from_row(row) if row is not None else None
 
     def add_evidence(
         self,

@@ -16,6 +16,11 @@ from tool_use_agent.tickets.state_machine import (
     InvalidTicketTransition,
     transition_ticket_status,
 )
+from tool_use_agent.tickets.service import (
+    TicketDetail,
+    TicketPage,
+    TicketService,
+)
 
 __all__ = [
     "ActiveInvestigationExists",
@@ -27,6 +32,9 @@ __all__ = [
     "Ticket",
     "TicketAlreadyExists",
     "TicketPriority",
+    "TicketDetail",
+    "TicketPage",
+    "TicketService",
     "TicketSource",
     "TicketStatus",
     "transition_ticket_status",

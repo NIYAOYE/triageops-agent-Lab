@@ -13,6 +13,8 @@ from tool_use_agent.tools.file_reader import FileReaderTool
 from tool_use_agent.tools.python_exec import PythonExecTool
 from tool_use_agent.tools.registry import ToolRegistry
 from tool_use_agent.tools.web_search import TavilySearchTool
+from tool_use_agent.tickets.repository import SQLiteTicketRepository
+from tool_use_agent.tickets.service import TicketService
 
 
 def build_service(settings: Settings | None = None) -> ChatService:
@@ -60,5 +62,17 @@ def build_service(settings: Settings | None = None) -> ChatService:
         raise
 
 
+def build_ticket_service(settings: Settings | None = None) -> TicketService:
+    resolved = settings or Settings.from_env()
+    return TicketService(SQLiteTicketRepository(resolved.database_path))
+
+
 def create_application() -> FastAPI:
-    return create_app(build_service())
+    settings = Settings.from_env()
+    chat_service = build_service(settings)
+    try:
+        ticket_service = build_ticket_service(settings)
+    except Exception:
+        chat_service.close()
+        raise
+    return create_app(chat_service, ticket_service)
