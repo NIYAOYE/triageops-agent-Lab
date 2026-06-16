@@ -12,6 +12,9 @@ from tool_use_agent.llm.summarizer import QwenConversationSummarizer
 from tool_use_agent.memory.repository import SQLiteRepository
 from tool_use_agent.service import ChatService
 from tool_use_agent.tools.file_reader import FileReaderTool
+from tool_use_agent.tools.csv_profile import CsvProfileTool
+from tool_use_agent.tools.json_query import JsonQueryTool
+from tool_use_agent.tools.log_scan import LogScanTool
 from tool_use_agent.tools.python_exec import PythonExecTool
 from tool_use_agent.tools.registry import ToolRegistry
 from tool_use_agent.tools.web_search import TavilySearchTool
@@ -123,6 +126,18 @@ def _build_registry_and_model(settings: Settings):
                 sys.executable,
                 timeout_seconds=settings.python_timeout_seconds,
                 max_output_chars=settings.max_output_chars,
+            ),
+            LogScanTool(
+                settings.workspace_root,
+                max_bytes=settings.max_file_bytes,
+            ),
+            JsonQueryTool(
+                settings.workspace_root,
+                max_bytes=settings.max_file_bytes,
+            ),
+            CsvProfileTool(
+                settings.workspace_root,
+                max_bytes=settings.max_file_bytes,
             ),
         ]
     )

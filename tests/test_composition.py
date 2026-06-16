@@ -47,7 +47,7 @@ def test_qwen_summarizer_parses_fenced_json_and_includes_previous_summary():
     assert "continue" in prompt
 
 
-def test_build_service_wires_three_tools_and_creates_workspace(
+def test_build_service_wires_supportops_utility_tools_and_creates_workspace(
     monkeypatch,
     tmp_path,
 ):
@@ -80,7 +80,14 @@ def test_build_service_wires_three_tools_and_creates_workspace(
         assert settings.workspace_root.exists()
         assert [
             schema["function"]["name"] for schema in captured["schemas"]
-        ] == ["web_search", "read_file", "python_exec"]
+        ] == [
+            "web_search",
+            "read_file",
+            "python_exec",
+            "log_scan",
+            "json_query",
+            "csv_profile",
+        ]
     finally:
         service.close()
 
@@ -138,6 +145,13 @@ def test_build_investigation_service_uses_real_database_and_tools(
         assert investigation.ticket_id == "INC-1042"
         assert [
             schema["function"]["name"] for schema in captured["schemas"]
-        ] == ["web_search", "read_file", "python_exec"]
+        ] == [
+            "web_search",
+            "read_file",
+            "python_exec",
+            "log_scan",
+            "json_query",
+            "csv_profile",
+        ]
     finally:
         service.close()
