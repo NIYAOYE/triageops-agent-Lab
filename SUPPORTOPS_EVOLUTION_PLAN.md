@@ -7,8 +7,8 @@
 
 项目从“通用 Tool-Use Agent 实验”演进为面向研发与运维团队的 **SupportOps 工单调查工作台**。
 
-目标用户是内部技术支持工程师。系统接收研发与运维故障工单，调用 Qwen、Tavily、受限文件读取和
-受限 Python 分析能力完成初步调查，生成可审计的结构化诊断方案，再由工程师人工批准、编辑后批准
+目标用户是内部技术支持工程师。系统接收研发与运维故障工单，调用 Qwen、Tavily、受限文件读取、
+受限 Python 和受控附件分析工具完成初步调查，生成可审计的结构化诊断方案，再由工程师人工批准、编辑后批准
 或退回继续调查。
 
 产品价值不依赖某个特定模型，而来自以下工程能力：
@@ -109,6 +109,7 @@ flowchart TB
     TV[Tavily Search]
     FR[Restricted File Reader]
     PY[Restricted Python Executor]
+    UT[Log JSON CSV Utility Tools]
     DB[(SQLite)]
     FS[(Ticket Attachment Workspace)]
 
@@ -126,7 +127,9 @@ flowchart TB
     TR --> TV
     TR --> FR
     TR --> PY
+    TR --> UT
     FR --> FS
+    UT --> FS
     TR --> AG
 ```
 
@@ -148,6 +151,9 @@ flowchart TB
 | `investigations/runner.py` | 将工单上下文转换为 LangGraph 输入并验证模型输出 |
 | `api/tickets.py` | 工单 REST API |
 | `api/investigations.py` | 调查、SSE 和审批 API |
+| `tools/log_scan.py` | 工作区日志关键词/正则扫描与上下文提取 |
+| `tools/json_query.py` | 工作区 JSON 简单点路径查询 |
+| `tools/csv_profile.py` | 工作区 CSV 行列、空值、重复值和分组概览 |
 
 路径可根据实际代码演进微调，但职责边界不得重新混回单个大型模块。
 
@@ -343,6 +349,7 @@ SSE 断线后，前端先通过 `GET /v1/investigations/{id}` 恢复持久化状
 - 状态机测试：所有合法转换和非法转换。
 - 导入测试：CSV/JSON 正常、字段缺失、重复、超限和部分失败。
 - 调查测试：使用 Fake LLM 和 Fake Tools 固定输出，验证证据和报告关联。
+- 工具测试：覆盖日志扫描、JSON 查询和 CSV 概览的正常路径、越界路径、缺失字段和错误契约。
 - API 测试：状态码、错误契约、SSE 顺序、断线后恢复。
 - 指标测试：时区、空数据、中位数、P75 和分组。
 
@@ -413,6 +420,12 @@ SSE 断线后，前端先通过 `GET /v1/investigations/{id}` 恢复持久化状
 交付种子数据、真实 API 演示、部署说明、结构化日志和安全边界文档。
 
 验收：全栈演示成功，非 live 回归测试全通过，live 测试显式通过。
+
+### Post-MVP Slice: SupportOps Utility Tools
+
+在不改变 LangGraph 主循环、调查 Runner、API 或数据库结构的前提下，扩展 `ToolRegistry` 中的受控工具函数。
+首批工具为 `log_scan`、`json_query` 和 `csv_profile`，用于提升 Agent 对日志、JSON 附件和 CSV 附件的本地分析能力。
+验收：工具单元测试、运行时装配测试、非 live 回归测试和编译检查通过；不引入 RAG、自动修复或外部工单系统对接。
 
 ## 14. Multi-Agent Collaboration Protocol
 
